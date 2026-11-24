@@ -1,0 +1,453 @@
+<title>Meetrix Door Display</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: door and calendar first (what people use), then the electronics bench, then the parts list. */
+:root {
+  --board: #e3e8e4; --ink: #161a18; --muted: #55605a; --line: #b9c3bc; --field: #f3f6f3;
+  --accent: #0b6b52; --on-accent: #ffffff; --case: #262b29; --key: #3a413e; --key-ink: #eef3f0; --pcb: #0c0f0e;
+  --busy: #b3261e; --on-busy: #ffffff; --door: #2b5fb0; --on-door: #ffffff;
+  --display: "Doto", ui-monospace, Menlo, monospace;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --board: #151a18; --ink: #e8eeea; --muted: #9aa8a0; --line: #39433e; --field: #1e2522;
+  --accent: #3ccf9f; --on-accent: #06251b; --case: #2c3330; --key: #454e4a; --key-ink: #eef3f0; --pcb: #090b0a;
+  --busy: #ef6a60; --on-busy: #2a0604; --door: #7fb0ff; --on-door: #061a38; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --board: #151a18; --ink: #e8eeea; --muted: #9aa8a0; --line: #39433e; --field: #1e2522;
+  --accent: #3ccf9f; --on-accent: #06251b; --case: #2c3330; --key: #454e4a; --key-ink: #eef3f0; --pcb: #090b0a;
+  --busy: #ef6a60; --on-busy: #2a0604; --door: #7fb0ff; --on-door: #061a38; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--board); color: var(--ink); font: 400 15px/1.5 var(--body) }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 56px; display: grid; gap: 44px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+.wrap > *, .two > *, .three > * { min-width: 0 }
+h1 { font: 600 24px/1.2 var(--body); margin: 0 0 4px }
+h2 { font: 600 19px/1.3 var(--body); margin: 0 0 4px }
+h3 { font: 600 15px/1.3 var(--body); margin: 0 0 6px }
+p { margin: 0; max-width: 68ch; color: var(--muted) }
+.two { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 44px; align-items: start }
+.three { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 32px; align-items: start }
+.stack { display: grid; gap: 20px; min-width: 0 }
+.stack > * { min-width: 0 }
+.keys { display: flex; justify-content: space-evenly; padding: 0 8% }
+.key { width: 36%; border: 0; border-radius: 6px 6px 0 0; background: var(--key); color: var(--key-ink); font: 600 18px/1 var(--body); padding: 13px 0; cursor: pointer; touch-action: none; user-select: none }
+.key.down { transform: translateY(4px) }
+.case { background: var(--case); border-radius: 10px; padding: 14px }
+#led { display: block; width: 100%; aspect-ratio: 1; background: var(--pcb); border-radius: 3px }
+.read { display: flex; flex-wrap: wrap; gap: 2px 16px; align-items: baseline; justify-content: center; min-height: 46px; margin-top: 12px }
+.clock { font: 800 34px/1.2 var(--display) }
+.say { font-weight: 500 }
+.scope { display: block; width: 100%; height: 240px }
+.box { border: 1px solid var(--line); background: var(--field); border-radius: 6px; padding: 12px }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center }
+.btn { border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 6px; padding: 7px 12px; font: 500 14px var(--body); cursor: pointer }
+.btn[aria-pressed=true] { background: var(--accent); color: var(--on-accent); border-color: var(--accent) }
+select, input[type=time] { border: 1px solid var(--line); background: var(--field); color: var(--ink); border-radius: 6px; padding: 6px 8px; font: 500 14px var(--body) }
+input[type=range] { width: 100%; min-width: 0; accent-color: var(--accent) }
+button:focus-visible, select:focus-visible, input:focus-visible, .wire:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+label.f { display: grid; gap: 4px; font-weight: 500; font-size: 14px; min-width: 0 }
+.hint { font-size: 13px; color: var(--muted) }
+.day { position: relative; height: 74px; border: 1px solid var(--line); background: var(--field); border-radius: 6px; overflow: hidden }
+.hours { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 4px }
+.ev { position: absolute; top: 12px; bottom: 12px; border: 1px solid var(--field); border-radius: 3px; background: var(--busy); color: var(--on-busy); cursor: pointer; padding: 0; min-width: 6px }
+.ev.own { background: var(--door); color: var(--on-door) }
+.nowline { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink) }
+.log { font: 400 12px/1.55 var(--mono); height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 }
+.log .t { color: var(--muted) }
+.scroll { overflow-x: auto }
+.scroll svg { display: block; width: 100%; min-width: 760px; height: auto }
+figure { margin: 0 }
+figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; max-width: 75ch }
+.wire { cursor: pointer }
+.meters { display: flex; flex-wrap: wrap; gap: 8px 26px; font-variant-numeric: tabular-nums }
+.meters b { font: 800 24px/1.2 var(--display); display: block }
+.meters span { font-size: 13px; color: var(--muted) }
+table { border-collapse: collapse; width: 100%; min-width: 700px; font-size: 14px }
+th, td { text-align: left; vertical-align: top; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--line) }
+th { font-weight: 600 }
+@media (max-width: 860px) { .two, .three { grid-template-columns: minmax(0, 1fr); gap: 32px } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Meetrix Door Display</h1>
+    <p>C firmware runs on simulated electronics, pin by pin, and books a room in a mock Microsoft 365. Press the keys on top of the panel.</p>
+  </header>
+
+  <section class="two">
+    <div>
+      <div class="keys">
+        <button class="key" id="k0" type="button" aria-label="Book 15 more minutes">+15</button>
+        <button class="key" id="k1" type="button" aria-label="Take back the last 15 minutes">✕</button>
+      </div>
+      <div class="case"><canvas id="led" role="img" aria-label="32 by 32 LED panel"></canvas></div>
+      <div class="read"><span class="clock" id="clock"></span><span class="say" id="say" aria-live="polite"></span></div>
+    </div>
+
+    <div class="stack">
+      <div>
+        <h2>Room calendar in Microsoft 365 (mock)</h2>
+        <p>Red is booked in Outlook, blue is booked at the door. Click a booking to delete it. The panel asks every 5 seconds.</p>
+      </div>
+      <div><div class="day" id="day"></div><div class="hours" aria-hidden="true"><span>08</span><span>10</span><span>12</span><span>14</span><span>16</span></div></div>
+      <div class="row">
+        <label class="f" for="o-start">Start<input type="time" id="o-start" value="11:00" min="08:00" max="15:45" step="900"></label>
+        <label class="f" for="o-len">Length<select id="o-len"><option value="15">15 min</option><option value="30" selected>30 min</option><option value="60">60 min</option></select></label>
+        <button class="btn" id="o-add" type="button" style="align-self:end">Book in Outlook</button>
+      </div>
+      <div><h3>Whiteboard states</h3><div class="row" id="states"></div></div>
+      <div>
+        <label class="f" for="time">Time of day<input id="time" type="range" min="480" max="959" step="1"></label>
+        <div class="row" style="margin-top:6px"><button class="btn" id="warp" type="button" aria-pressed="false">Clock at 60× speed</button></div>
+      </div>
+      <div class="row">
+        <label class="f" for="c-mode">Top of circle<select id="c-mode"><option value="0">Full hour</option><option value="1">Now</option></select></label>
+        <label class="f" for="c-free">Free time<select id="c-free"><option value="0">As drawn</option><option value="1">Outline</option><option value="2">Filled</option></select></label>
+        <label class="f" for="c-row">Day row<select id="c-row"><option value="1">Show</option><option value="0">Hide</option></select></label>
+      </div>
+      <p class="hint">As drawn: free right now is an outline, a free slice later in the hour is filled.</p>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div>
+      <h2>Circuit</h2>
+      <p>Click a signal wire to cut it and see what the panel does. Pin numbers are the MatrixPortal S3's.</p>
+    </div>
+    <div class="row" style="align-items:end">
+      <button class="btn" id="pw" type="button" aria-pressed="true">Power</button>
+      <label class="f" for="speed">Electrical speed<select id="speed"><option value="1">Real time</option><option value="1000">1,000× slower</option><option value="20000">20,000× slower</option></select></label>
+      <button class="btn" id="mend" type="button">Repair all wires</button>
+    </div>
+    <figure>
+      <div class="scroll box"><svg id="sch" viewBox="0 0 1000 560" role="group" aria-label="Circuit: supply, keys and controller on the left, 13 panel signals through a level shifter to the HUB75 panel, and Wi-Fi to the bridge and Microsoft 365"></svg></div>
+      <figcaption>Thirteen signals drive the panel. Six carry color data, CLK shifts it in, LAT latches a row, A to D pick one of 16 row pairs, OE switches the LEDs on. In slow motion, bright wires are high.</figcaption>
+    </figure>
+  </section>
+
+  <section class="three">
+    <div>
+      <h2>Logic analyzer</h2>
+      <p class="hint">One scan step: latch, shift the next 32 columns while dark, then OE goes low and the row lights.</p>
+      <div class="box"><canvas class="scope" id="la" style="height:300px" role="img" aria-label="Waveforms of the panel signals"></canvas></div>
+      <label class="f" for="trig" style="margin-top:8px"><span id="trig-l">Trigger row pair</span><input type="range" id="trig" min="0" max="15" value="8"></label>
+    </div>
+    <div class="stack">
+      <div>
+        <h2>Key signal</h2>
+        <p class="hint" id="key-h">Press a key to see its contact bounce and when the firmware accepts it.</p>
+        <div class="box"><canvas class="scope" id="ks" style="height:120px" role="img" aria-label="Raw key contact and accepted press"></canvas></div>
+      </div>
+      <div>
+        <h2>5 V supply</h2>
+        <div class="meters" id="meters"></div>
+        <div class="box" style="margin-top:8px"><canvas class="scope" id="ps" style="height:80px" role="img" aria-label="Current over time"></canvas></div>
+      </div>
+    </div>
+    <div>
+      <h2>Serial console</h2>
+      <div class="box"><pre class="log" id="uart" tabindex="0"></pre></div>
+    </div>
+    <div>
+      <h2>Network traffic</h2>
+      <div class="box"><pre class="log" id="net" tabindex="0"></pre></div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div><h2>Fault bench</h2><p>Break something and watch the panel, the console and the supply.</p></div>
+    <div class="three">
+      <div class="stack">
+        <label class="f" for="f-supply">Supply limit<select id="f-supply"><option value="0.5">0.5 A (USB 2 port)</option><option value="1">1 A</option><option value="2" selected>2 A</option><option value="4">4 A</option></select></label>
+        <label class="f" for="f-bright"><span id="f-bright-l"></span><input type="range" id="f-bright" min="5" max="100" step="5" value="60"></label>
+        <label class="f" for="f-shift">Signals to panel<select id="f-shift"><option value="1">Through 5 V level shifter</option><option value="0">Straight from 3.3 V pins</option></select></label>
+      </div>
+      <div class="stack">
+        <label class="f" for="f-bounce"><span id="f-bounce-l"></span><input type="range" id="f-bounce" min="0" max="40" step="1" value="5"></label>
+        <label class="f" for="f-deb">Firmware debounce<select id="f-deb"><option value="20">20 ms</option><option value="1">Off</option></select></label>
+        <label class="f" for="f-pull">Key pull-ups<select id="f-pull"><option value="1">On (inside the ESP32)</option><option value="0">Missing, pins float</option></select></label>
+      </div>
+      <div class="stack">
+        <label class="f" for="f-lat"><span id="f-lat-l"></span><input type="range" id="f-lat" min="10" max="1500" step="10" value="120"></label>
+        <div class="row"><button class="btn" id="f-wifi" type="button" aria-pressed="true">Wi-Fi</button><button class="btn" id="f-m365" type="button" aria-pressed="true">Microsoft 365</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <h2>Parts and how far the simulation goes</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Part</th><th>Simulated</th><th>Simplified or assumed</th></tr></thead>
+      <tbody>
+        <tr><td>Adafruit MatrixPortal S3 (ESP32-S3)</td><td>GPIO registers on the real pin numbers, one-shot timer interrupt, 1 ms loop, serial, clock sync, boot and reset</td><td>Not an ESP32 emulator. The C code is compiled for the browser. A real build should use Adafruit's DMA driver for the panel.</td></tr>
+        <tr><td>32×32 RGB panel, HUB75, 1:16 scan</td><td>Six 32-bit shift registers, latch, row decoder, OE, light added up per LED in nanoseconds</td><td>20 mA per lit channel, which gives 3.84 A all white. Adafruit states nearly 4 A.</td></tr>
+        <tr><td>Level shifter, 3.3 V to 5 V</td><td>With and without</td><td>Error rate without it is assumed. Check whether the board already has one; Adafruit's pinout page does not say.</td></tr>
+        <tr><td>Two push buttons, GPIO 6 and 7</td><td>Contact, bounce, pull-up or floating pin, debounce in firmware</td><td>The board's own keys have no pull-up resistors, so the firmware turns on the internal ones.</td></tr>
+        <tr><td>5 V supply</td><td>Average current from lit LEDs, cable drop, current limit, brownout reset</td><td>0.1 Ω cable, 4.0 V brownout and controller current are assumed. Measure these first.</td></tr>
+        <tr><td>Wi-Fi and bridge server</td><td>Join, delay, loss, timeout, retry, conflict check</td><td>No TLS, sign-in or device keys yet</td></tr>
+        <tr><td>Microsoft 365</td><td>calendarView, create, update and delete event with Graph v1.0 paths and status codes</td><td>No tokens, time zones, recurrence, paging or throttling</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+</div>
+
+<script>
+/*BUNDLE*/
+</script>
+<script>
+const $ = id => document.getElementById(id);
+const sim = new Sim(createFirmware);
+loadState(sim, 3);
+sim.power(true);
+sim.run(2.5e9);                       // past boot, so the page opens on a working panel
+sim.acc.fill(0); sim.accFrom = sim.t;
+let speed = 1, seen = 0, lastReal = performance.now(), picked = 3, dragTime = false;
+const eye = new Float32Array(32 * 32 * 3), MAXDUTY = 1 / 16 * 0.9;
+const hist = [];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const svgEl = (n, a, text) => { const e = document.createElementNS('http://www.w3.org/2000/svg', n); for (const k in a) e.setAttribute(k, a[k]); if (text != null) e.textContent = text; return e; };
+
+function fit(cv) {
+  const d = Math.min(2, devicePixelRatio || 1), w = Math.max(1, Math.round(cv.clientWidth * d)), h = Math.max(1, Math.round(cv.clientHeight * d));
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  const g = cv.getContext('2d'); g.setTransform(d, 0, 0, d, 0, 0); g.clearRect(0, 0, w, h);
+  return [g, cv.clientWidth, cv.clientHeight];
+}
+
+// --- panel: what the eye sees, plus the rows lit at this instant in slow motion ---
+function drawPanel() {
+  const dt = sim.t - sim.accFrom;
+  if (dt > 0) {
+    const k = Math.exp(-dt / 8e6);
+    for (let i = 0; i < eye.length; i++) { eye[i] = eye[i] * k + sim.acc[i] / dt * (1 - k); sim.acc[i] = 0; }
+    sim.accFrom = sim.t;
+  }
+  const [g, w] = fit($('led')), p = w / 32, slow = speed > 1;
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    const i = (y * 32 + x) * 3, c = [0, 0, 0];
+    let on = 0;
+    for (let k = 0; k < 3; k++) {
+      c[k] = Math.pow(Math.min(1, eye[i + k] / MAXDUTY * 1.4), 1 / 2.2) * (slow ? 0.45 : 1);
+      if (slow && sim.lit && (y & 15) === sim.rowSel && sim.lat[k + (y > 15 ? 3 : 0)] >>> (31 - x) & 1) c[k] = 1;
+      on = Math.max(on, c[k]);
+    }
+    const cx = (x + 0.5) * p, cy = (y + 0.5) * p;
+    const rgb = c.map((v, k) => Math.round([24, 29, 27][k] * (1 - v) + 255 * v)).join(',');
+    if (on > 0.1) { g.fillStyle = 'rgba(' + rgb + ',0.2)'; g.beginPath(); g.arc(cx, cy, p * 0.62, 0, 7); g.fill(); }
+    g.fillStyle = 'rgb(' + rgb + ')'; g.beginPath(); g.arc(cx, cy, p * 0.38, 0, 7); g.fill();
+  }
+}
+
+// --- circuit diagram ---
+const wires = {}, live = {};
+(function schematic() {
+  const s = $('sch'), T = (x, y, t, o = {}) => { const e = svgEl('text', { x, y, fill: 'currentColor', 'font-size': 12, 'text-anchor': 'start', ...o }, t); s.append(e); return e; };
+  const box = (x, y, w, h) => s.append(svgEl('rect', { x, y, width: w, height: h, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, rx: 4 }));
+  const line = (pts, o = {}) => s.append(svgEl('polyline', { points: pts, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, ...o }));
+  const bold = { 'font-weight': 600, 'font-size': 13 };
+  box(20, 20, 150, 78); T(34, 43, '5 V supply', bold); live.v = T(34, 64, ''); live.a = T(34, 83, '');
+  line('170,40 720,40'); T(440, 32, '5 V rail'); line('320,40 320,62'); line('860,40 720,40'); line('860,40 860,62'); line('585,40 585,78');
+  box(240, 62, 160, 390); T(254, 85, 'MatrixPortal S3', bold); live.mcu = T(254, 104, ''); T(254, 122, '3.3 V logic', { opacity: .7 });
+  [['+15', 190, 'GPIO 6'], ['cancel', 300, 'GPIO 7']].forEach(([n, y, pin], i) => {
+    T(20, y - 16, 'SW' + (i + 1) + '  ' + n, bold);
+    line('40,' + (y + 34) + ' 40,' + y + ' 90,' + y); line('130,' + y + ' 240,' + y);
+    live['sw' + i] = svgEl('line', { x1: 90, y1: y, x2: 127, y2: y - 14, stroke: 'currentColor', 'stroke-width': 2.5 }); s.append(live['sw' + i]);
+    line('30,' + (y + 34) + ' 50,' + (y + 34)); line('35,' + (y + 39) + ' 45,' + (y + 39));
+    T(160, y - 8, 'to ground'); T(250, y + 4, pin);
+  });
+  T(250, 238, 'pull-up inside', { opacity: .7, 'font-size': 11 });
+  box(550, 78, 70, 374); T(585, 100, '3.3 V', { 'text-anchor': 'middle' }); T(585, 116, 'to 5 V', { 'text-anchor': 'middle' });
+  T(585, 470, 'level shifter', { 'text-anchor': 'middle' });
+  box(720, 62, 260, 390); T(734, 85, 'HUB75 panel, 32×32', bold);
+  const groups = [['Shift registers', '6 × 32 bits', 0, 6], ['Latch and light', 'LAT holds, OE lights', 6, 9], ['Row decoder', '1 of 16 row pairs', 9, 13]];
+  const order = ['R1', 'G1', 'B1', 'R2', 'G2', 'B2', 'CLK', 'LAT', 'OE', 'A', 'B', 'C', 'D'];
+  const Y = i => 138 + i * 24;
+  groups.forEach(([n, d, a, b]) => { box(800, Y(a) - 12, 168, (b - a) * 24 - 4); T(812, Y(a) + 8, n, { 'font-weight': 600 }); T(812, Y(a) + 25, d, { 'font-size': 11, opacity: .8 }); });
+  live.lit = T(812, Y(0) + 60, ''); live.row = T(812, Y(9) + 50, '');
+  order.forEach((n, i) => {
+    const y = Y(i), g = svgEl('g', { class: 'wire', role: 'button', tabindex: 0, 'aria-pressed': 'false', 'aria-label': 'Wire ' + n + ', cut' });
+    T(392, y + 4, n + '  ' + PINS[n], { 'text-anchor': 'end', 'font-size': 11 });
+    const l1 = svgEl('line', { x1: 400, y1: y, x2: 550, y2: y, 'stroke-width': 2.5 }), l2 = svgEl('line', { x1: 620, y1: y, x2: 800, y2: y, 'stroke-width': 2.5 });
+    const x = svgEl('path', { d: 'M662 ' + (y - 7) + 'l14 14m0 -14l-14 14', stroke: 'var(--busy)', 'stroke-width': 3, fill: 'none', visibility: 'hidden' });
+    g.append(svgEl('rect', { x: 400, y: y - 11, width: 400, height: 22, fill: 'transparent' }), l1, l2, x);
+    s.append(g);
+    T(728, y - 4, n, { 'font-size': 11 });
+    const flip = () => { sim.cut.has(n) ? sim.cut.delete(n) : sim.cut.add(n); sim.applyWires(); showCuts(); };
+    g.addEventListener('click', flip);
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+    wires[n] = { g, l1, l2, x };
+  });
+  s.append(Object.assign(svgEl('defs', {}), { innerHTML: '' }));
+  const arrow = svgEl('marker', { id: 'arr', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 8, markerHeight: 8, orient: 'auto-start-reverse' });
+  arrow.append(svgEl('path', { d: 'M0 0L8 4L0 8z', fill: 'currentColor' })); s.lastChild.append(arrow);
+  box(430, 495, 150, 46); T(505, 523, 'Bridge server', { ...bold, 'text-anchor': 'middle' });
+  box(780, 495, 200, 46); T(880, 523, 'Microsoft 365 (mock)', { ...bold, 'text-anchor': 'middle' });
+  live.l1 = svgEl('polyline', { points: '320,452 320,518 430,518', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'marker-end': 'url(#arr)', 'marker-start': 'url(#arr)' });
+  live.l2 = svgEl('polyline', { points: '580,518 780,518', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'marker-end': 'url(#arr)', 'marker-start': 'url(#arr)' });
+  s.append(live.l1, live.l2);
+  T(332, 508, 'Wi-Fi: times only'); T(680, 508, 'Graph REST', { 'text-anchor': 'middle' });
+})();
+function showCuts() {
+  for (const n in wires) { const c = sim.cut.has(n); wires[n].x.setAttribute('visibility', c ? 'visible' : 'hidden'); wires[n].g.setAttribute('aria-pressed', String(c)); }
+}
+const level = (n, o0, o1) => PINS[n] < 32 ? o0 >>> PINS[n] & 1 : o1 >>> (PINS[n] - 32) & 1;
+const put = (el, t) => { if (el.textContent !== t) el.textContent = t; };
+function drawCircuit() {
+  for (const n in wires) {
+    const high = level(n, sim.o0, sim.o1), act = level(n, sim.touched0, sim.touched1);
+    const on = speed > 1 ? high : act, color = on ? 'var(--accent)' : 'var(--line)';
+    wires[n].l1.setAttribute('stroke', color);
+    wires[n].l2.setAttribute('stroke', sim.cut.has(n) ? 'var(--line)' : color);
+    wires[n].l2.setAttribute('stroke-dasharray', sim.cut.has(n) ? '4 6' : 'none');
+  }
+  sim.touched0 = sim.touched1 = 0;
+  put(live.v, sim.volts.toFixed(2) + ' V'); put(live.a, sim.amps.toFixed(2) + ' A of ' + sim.limitA + ' A');
+  put(live.mcu, sim.mcu === 'run' ? (sim.wifi ? 'running, Wi-Fi up' : 'running, no Wi-Fi') : sim.mcu === 'boot' ? 'booting' : 'off');
+  put(live.lit, speed > 1 ? sim.pop + ' of 192 outputs latched on' : '');
+  put(live.row, speed > 1 ? 'rows ' + sim.rowSel + ' and ' + (sim.rowSel + 16) + (sim.lit ? ' lit' : ' dark') : '');
+  for (let i = 0; i < 2; i++) live['sw' + i].setAttribute('y2', +live['sw' + i].getAttribute('y1') - (sim.contact[i] ? 0 : 14));
+  live.l1.setAttribute('stroke-dasharray', sim.wifi ? 'none' : '4 6');
+  live.l2.setAttribute('stroke-dasharray', sim.graph.up ? 'none' : '4 6');
+}
+
+// --- instruments ---
+function drawLA() {
+  const [g, w, h] = fit($('la')), rows = ['R1', 'G1', 'R2', 'G2', 'CLK', 'LAT', 'OE', 'A', 'B', 'C', 'D'], lh = (h - 18) / rows.length, L = 34, span = 4200;
+  g.font = '11px ' + css('--mono'); g.textBaseline = 'middle';
+  g.fillStyle = css('--muted');
+  for (let us = 0; us <= 4; us++) { const x = L + us * 1000 / span * (w - L); g.fillRect(x, 0, 1, h - 16); g.fillText(us + ' µs', Math.min(x + 3, w - 30), h - 7); }
+  rows.forEach((n, r) => {
+    const y0 = r * lh + lh * 0.8, y1 = r * lh + lh * 0.2;
+    g.fillStyle = css('--ink'); g.fillText(n, 0, r * lh + lh / 2);
+    if (!sim.capture) return;
+    g.strokeStyle = n[0] === 'R' ? css('--busy') : css('--accent'); g.lineWidth = 1.3; g.beginPath();
+    let last = null, xEnd = L;
+    for (let i = 0; i < sim.capture.n; i++) {
+      const x = L + Math.min(1, sim.capT[i] / span) * (w - L), v = level(n, sim.cap0[i], sim.cap1[i]), y = v ? y1 : y0;
+      if (last === null) g.moveTo(L, y); else g.lineTo(x, last);
+      g.lineTo(x, y); last = y; xEnd = x;
+    }
+    if (last !== null && xEnd < w) g.lineTo(w, last);
+    g.stroke();
+  });
+  sim.wantCapture = true;
+}
+function drawKey() {
+  const [g, w, h] = fit($('ks')), k = sim.keyTrace, L = 60, span = 70e6;
+  g.font = '11px ' + css('--mono'); g.textBaseline = 'middle'; g.fillStyle = css('--ink');
+  g.fillText('contact', 0, 26); g.fillText('accepted', 0, 72);
+  g.fillStyle = css('--muted');
+  for (let ms = 0; ms <= 60; ms += 20) { const x = L + ms * 1e6 / span * (w - L); g.fillRect(x, 0, 1, h - 18); g.fillText(ms + ' ms', x + 3, h - 8); }
+  if (!k) return;
+  const X = t => L + Math.min(1, t / span) * (w - L);
+  g.lineWidth = 1.5; g.strokeStyle = css('--ink'); g.beginPath();
+  let y = 12; g.moveTo(L, y);
+  for (const [t, v] of k.edges) { g.lineTo(X(t), y); y = v ? 12 : 40; g.lineTo(X(t), y); }
+  g.lineTo(X(Math.min(span, sim.t - k.t0)), y); g.stroke();
+  g.strokeStyle = css('--accent'); g.beginPath(); g.moveTo(L, 84);
+  for (const t of k.led) if (t < span) { g.lineTo(X(t), 84); g.lineTo(X(t), 60); g.lineTo(X(t + 30e6), 60); g.lineTo(X(t + 30e6), 84); }
+  g.lineTo(w, 84); g.stroke();
+  put($('key-h'), 'Last press: ' + k.edges.length + ' contact changes, ' + k.led.length + (k.led.length === 1 ? ' press' : ' presses') + ' accepted.');
+}
+let hz = 0, hzT = sim.t, hzF = sim.frames;
+function drawPower() {
+  if (sim.t - hzT > 1e8) { hz = (sim.frames - hzF) / (sim.t - hzT) * 1e9; hzT = sim.t; hzF = sim.frames; }
+  hist.push(sim.amps); if (hist.length > 240) hist.shift();
+  const [g, w, h] = fit($('ps')), top = Math.max(1, ...hist, sim.limitA) * 1.1, Y = v => h - v / top * h;
+  g.strokeStyle = css('--busy'); g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, Y(sim.limitA)); g.lineTo(w, Y(sim.limitA)); g.stroke(); g.setLineDash([]);
+  g.fillStyle = css('--muted'); g.font = '11px ' + css('--mono'); g.fillText('limit ' + sim.limitA + ' A', 2, Y(sim.limitA) + 13);
+  g.strokeStyle = css('--accent'); g.lineWidth = 1.6; g.beginPath();
+  hist.forEach((v, i) => g.lineTo(i / 239 * w, Y(v))); g.stroke();
+}
+const meter = ['Volts', 'Amps', 'Refresh', 'Resets'].map(n => { const d = document.createElement('div'); d.append(document.createElement('b'), Object.assign(document.createElement('span'), { textContent: n })); $('meters').append(d); return d.firstChild; });
+function drawMeters() {
+  put(meter[0], sim.volts.toFixed(2)); put(meter[1], sim.amps.toFixed(2));
+  put(meter[2], Math.round(hz) + ' Hz'); put(meter[3], String(sim.resets));
+}
+function drawLogs() {
+  if (seen === sim.logSeq) return;
+  seen = sim.logSeq;
+  for (const [id, kinds] of [['uart', ['uart']], ['net', ['dev', 'graph']]]) {
+    const el = $(id), frag = document.createDocumentFragment();
+    for (const l of sim.log.filter(l => kinds.includes(l.kind)).slice(-70)) {
+      const t = document.createElement('span'); t.className = 't';
+      t.textContent = (l.t / 1e9).toFixed(3).padStart(8) + '  ' + (l.kind === 'graph' ? 'bridge → Graph  ' : l.kind === 'dev' ? 'panel ↔ bridge  ' : '');
+      frag.append(t, l.text + '\n');
+    }
+    el.replaceChildren(frag); el.scrollTop = el.scrollHeight;
+  }
+}
+
+// --- calendar and status text ---
+let dayKey = '';
+function drawDay() {
+  const list = sim.graph.list(), key = JSON.stringify(list), d = $('day');
+  if (key !== dayKey) {
+    dayKey = key;
+    d.replaceChildren(...list.map(m => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'ev' + (m.own ? ' own' : '');
+      b.style.left = (m.s - 480) / 4.8 + '%'; b.style.width = (m.e - m.s) / 4.8 + '%';
+      b.title = hhmm(m.s) + ' to ' + hhmm(m.e) + ', ' + m.subject; b.setAttribute('aria-label', 'Delete ' + b.title);
+      b.onclick = () => { sim.graph.events = sim.graph.events.filter(e => e.id !== m.id); };
+      return b;
+    }), Object.assign(document.createElement('div'), { className: 'nowline', id: 'nowline' }));
+  }
+  const now = sim.minute();
+  $('nowline').style.left = (now - 480) / 4.8 + '%';
+  put($('clock'), hhmm(now));
+  if (document.activeElement !== $('time') || sim.warp > 1) $('time').value = Math.floor(now);
+  const last = [...sim.log].reverse().find(l => l.kind === 'uart' && /^(book|cancel|key|booking|bridge|wifi|rst|Brownout)/.test(l.text));
+  const cur = list.find(m => m.s <= now && now < m.e), next = list.find(m => m.s > now);
+  const state = cur ? (cur.own ? 'Booked at the door until ' : 'Occupied until ') + hhmm(cur.e) : next ? 'Free until ' + hhmm(next.s) : 'Free for the rest of the day';
+  put($('say'), !sim.powerOn ? 'Power is off' : last && sim.t - last.t < 2.5e9 && /refused|conflict|lost|Brownout/.test(last.text) ? last.text[0].toUpperCase() + last.text.slice(1) : state);
+}
+
+// --- controls ---
+for (const i of [0, 1]) {
+  const b = $('k' + i); let held = false;
+  const set = v => { if (v === held) return; held = v; b.classList.toggle('down', v); sim.key(i, v); };
+  b.addEventListener('pointerdown', e => { b.setPointerCapture(e.pointerId); set(true); });
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture', 'blur']) b.addEventListener(t, () => set(false));
+  b.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); set(true); } });
+  b.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); set(false); } });
+}
+STATES.forEach((st, i) => {
+  const b = Object.assign(document.createElement('button'), { className: 'btn', type: 'button', id: 'st-' + i, textContent: st.name });
+  b.onclick = () => { loadState(sim, i); setWarp(1); };
+  $('states').append(b);
+});
+function setWarp(w) { sim.setWarp(w); $('warp').setAttribute('aria-pressed', String(w > 1)); }
+$('warp').onclick = () => setWarp(sim.warp > 1 ? 1 : 60);
+$('time').oninput = e => { sim.setClock(+e.target.value); };
+$('o-add').onclick = () => {
+  const [h, m] = ($('o-start').value || '11:00').split(':').map(Number), s = h * 60 + m;
+  sim.graph.add(s, Math.min(960, s + +$('o-len').value), 'Booked in Outlook', false);
+};
+const cfg = () => sim.configure({ mode: +$('c-mode').value, free: +$('c-free').value, row: +$('c-row').value, bright: +$('f-bright').value, debounce: +$('f-deb').value, pullup: +$('f-pull').value });
+for (const id of ['c-mode', 'c-free', 'c-row', 'f-deb', 'f-pull']) $(id).onchange = cfg;
+const range = (id, text, f) => { const go = () => { put($(id + '-l'), text(+$(id).value)); f(+$(id).value); }; $(id).oninput = go; go(); };
+range('f-bright', v => 'Brightness ' + v + '%', cfg);
+range('f-bounce', v => 'Key bounce ' + v + ' ms', v => { sim.bounceMs = v; });
+range('f-lat', v => 'Network delay ' + v + ' ms per hop', v => { sim.latencyMs = v; });
+range('trig', v => 'Trigger row pair ' + v + ' and ' + (v + 16), v => { sim.capRow = v; });
+$('f-supply').onchange = e => { sim.limitA = +e.target.value; };
+$('f-shift').onchange = e => { sim.shifter = e.target.value === '1'; };
+const toggle = (id, f) => { $(id).onclick = () => { const v = $(id).getAttribute('aria-pressed') !== 'true'; $(id).setAttribute('aria-pressed', String(v)); f(v); }; };
+toggle('pw', v => sim.power(v));
+toggle('f-wifi', v => sim.setWifi(v));
+toggle('f-m365', v => { sim.graph.up = v; });
+$('mend').onclick = () => { sim.cut.clear(); sim.applyWires(); showCuts(); };
+$('speed').onchange = e => { speed = +e.target.value; };
+
+function frame(now) {
+  const real = Math.min(50, now - lastReal); lastReal = now;
+  const stop = performance.now() + 14;
+  sim.run(sim.t + real * 1e6 / speed, () => performance.now() < stop);
+  drawPanel(); drawCircuit(); drawLA(); drawKey(); drawPower(); drawMeters(); drawLogs(); drawDay();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>

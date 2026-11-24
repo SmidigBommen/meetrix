@@ -1,0 +1,14 @@
+{
+  "name": "meetrix",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs && node sim/test.mjs",
+    "enclosure": "node build.mjs && node enclosure/build.mjs"
+  },
+  "devDependencies": {
+    "@jscad/modeling": "^2.12.2",
+    "binaryen": "129.0.0"
+  }
+}
